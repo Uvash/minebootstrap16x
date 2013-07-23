@@ -9,10 +9,11 @@ import java.net.BindException;
 import java.net.Proxy;
 import java.net.URL;
 import java.security.MessageDigest;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.net.HttpURLConnection;
 //import javax.net.ssl.SSLHandshakeException;
 import net.minecraft.bootstrap.Bootstrap;
-import net.minecraft.bootstrap.Downloader$Controller;
 
 public class Downloader implements Runnable {
 
@@ -20,11 +21,11 @@ public class Downloader implements Runnable {
    private final Proxy proxy;
    private final String currentMd5;
    private final File targetFile;
-   private final Downloader$Controller controller;
+   private final Downloader.Controller controller;
    private Bootstrap bootstrap;
 
 
-   public Downloader(Downloader$Controller controller, Bootstrap bootstrap, Proxy proxy, String currentMd5, File targetFile) {
+   public Downloader(Downloader.Controller controller, Bootstrap bootstrap, Proxy proxy, String currentMd5, File targetFile) {
       this.controller = controller;
       this.bootstrap = bootstrap;
       this.proxy = proxy;
@@ -43,7 +44,7 @@ public class Downloader implements Runnable {
          }
 
          try {
-            URL e = new URL("http://mcuw.caver.org/Minecraft.Download/launcher/launcher.pack.lzma");
+            URL e = new URL("http://webmcr.caver.org/MineCraft/MinecraftDownload/launcher/launcher.pack.lzma");
             HttpURLConnection connection = this.getConnection(e);
             connection.setUseCaches(false);
             connection.setDefaultUseCaches(false);
@@ -56,7 +57,7 @@ public class Downloader implements Runnable {
 
             connection.setConnectTimeout(30000);
             connection.setReadTimeout(10000);
-            this.log("Downloading: https://mcuw.caver.org/Minecraft.Download/launcher/launcher.pack.lzma" + (retries > 1?String.format(" (try %d/%d)", new Object[]{Integer.valueOf(retries), Integer.valueOf(10)}):""));
+            this.log("Downloading: http://webmcr.caver.org/MineCraft/MinecraftDownload/launcher/launcher.pack.lzma" + (retries > 1?String.format(" (try %d/%d)", new Object[]{Integer.valueOf(retries), Integer.valueOf(10)}):""));
             long start = System.nanoTime();
             connection.connect();
             long elapsed = System.nanoTime() - start;
@@ -122,11 +123,6 @@ public class Downloader implements Runnable {
       if(t instanceof BindException) {
          this.log("Recognized exception: the likely cause is a broken ipv4/6 stack. Check your TCP/IP settings.");
       }
-      /*
-      } else if(t instanceof SSLHandshakeException) {
-         this.log("Recognized exception: the likely cause is a set of broken/missing root-certificates. Check your java install and perhaps reinstall it.");
-      }
-*/
    }
 
    public void log(String str) {
@@ -135,5 +131,14 @@ public class Downloader implements Runnable {
 
    public HttpURLConnection getConnection(URL url) throws IOException {
       return (HttpURLConnection)url.openConnection(this.proxy);
+   }
+
+   public static class Controller {
+
+      public final CountDownLatch foundUpdateLatch = new CountDownLatch(1);
+      public final AtomicBoolean foundUpdate = new AtomicBoolean(false);
+      public final CountDownLatch hasDownloadedLatch = new CountDownLatch(1);
+
+
    }
 }

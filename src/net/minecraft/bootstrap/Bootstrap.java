@@ -23,7 +23,10 @@ import java.net.Proxy.Type;
 import java.nio.channels.FileChannel;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
+import java.text.DateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Pack200;
@@ -43,18 +46,15 @@ import joptsimple.OptionException;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-
-import net.minecraft.bootstrap.Bootstrap$1;
-import net.minecraft.bootstrap.Bootstrap$2;
 import net.minecraft.bootstrap.Downloader;
-import net.minecraft.bootstrap.Downloader$Controller;
 import net.minecraft.bootstrap.FatalBootstrapError;
 import net.minecraft.bootstrap.Util;
+import net.minecraft.hopper.HopperService;
 
 public class Bootstrap extends JFrame {
 
    private static final Font MONOSPACED = new Font("Monospaced", 0, 12);
-   public static final String LAUNCHER_URL = "http://mcuw.caver.org/Minecraft.Download/launcher/launcher.pack.lzma";
+   public static final String LAUNCHER_URL = "https://s3.amazonaws.com/Minecraft.Download/launcher/launcher.pack.lzma";
    private final File workDir;
    private final Proxy proxy;
    private final File launcherJar;
@@ -64,6 +64,7 @@ public class Bootstrap extends JFrame {
    private final JScrollPane scrollPane;
    private final PasswordAuthentication proxyAuth;
    private final String[] remainderArgs;
+   private final StringBuilder outputBuffer = new StringBuilder();
 
 
    public Bootstrap(File workDir, Proxy proxy, PasswordAuthentication proxyAuth, String[] remainderArgs) {
@@ -88,7 +89,15 @@ public class Bootstrap extends JFrame {
       this.add(this.scrollPane);
       this.setLocationRelativeTo((Component)null);
       this.setVisible(true);
-      this.println("Bootstrap started");
+      this.println("Bootstrap (v5)");
+      this.println("Current time is " + DateFormat.getDateTimeInstance(2, 2, Locale.US).format(new Date()));
+      this.println("System.getProperty(\'os.name\') == \'" + System.getProperty("os.name") + "\'");
+      this.println("System.getProperty(\'os.version\') == \'" + System.getProperty("os.version") + "\'");
+      this.println("System.getProperty(\'os.arch\') == \'" + System.getProperty("os.arch") + "\'");
+      this.println("System.getProperty(\'java.version\') == \'" + System.getProperty("java.version") + "\'");
+      this.println("System.getProperty(\'java.vendor\') == \'" + System.getProperty("java.vendor") + "\'");
+      this.println("System.getProperty(\'sun.arch.data.model\') == \'" + System.getProperty("sun.arch.data.model") + "\'");
+      this.println("");
    }
 
    public void execute(boolean force) {
@@ -97,7 +106,7 @@ public class Bootstrap extends JFrame {
          this.renameNew();
       }
 
-      Downloader$Controller controller = new Downloader$Controller();
+      Downloader.Controller controller = new Downloader.Controller();
       if(!force && this.packedLauncherJar.exists()) {
          String md51 = this.getMd5(this.packedLauncherJar);
          Thread thread = new Thread(new Downloader(controller, this, this.proxy, md51, this.packedLauncherJarNew));
@@ -216,8 +225,9 @@ public class Bootstrap extends JFrame {
 
    public void print(String string) {
       System.out.print(string);
+      this.outputBuffer.append(string);
       Document document = this.textArea.getDocument();
-      JScrollBar scrollBar = this.scrollPane.getVerticalScrollBar();
+      final JScrollBar scrollBar = this.scrollPane.getVerticalScrollBar();
       boolean shouldScroll = (double)scrollBar.getValue() + scrollBar.getSize().getHeight() + (double)(MONOSPACED.getSize() * 2) > (double)scrollBar.getMaximum();
 
       try {
@@ -227,7 +237,11 @@ public class Bootstrap extends JFrame {
       }
 
       if(shouldScroll) {
-         SwingUtilities.invokeLater(new Bootstrap$1(this, scrollBar));
+         SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+               scrollBar.setValue(Integer.MAX_VALUE);
+            }
+         });
       }
 
    }
@@ -238,7 +252,7 @@ public class Bootstrap extends JFrame {
       try {
          Class e = (new URLClassLoader(new URL[]{launcherJar.toURI().toURL()})).loadClass("net.minecraft.launcher.Launcher");
          Constructor constructor = e.getConstructor(new Class[]{JFrame.class, File.class, Proxy.class, PasswordAuthentication.class, String[].class, Integer.class});
-         constructor.newInstance(new Object[]{this, this.workDir, this.proxy, this.proxyAuth, this.remainderArgs, Integer.valueOf(4)});
+         constructor.newInstance(new Object[]{this, this.workDir, this.proxy, this.proxyAuth, this.remainderArgs, Integer.valueOf(5)});
       } catch (Exception var4) {
          throw new FatalBootstrapError("Unable to start: " + var4);
       }
@@ -319,7 +333,7 @@ public class Bootstrap extends JFrame {
       OptionSet optionSet;
       try {
          optionSet = optionParser.parse(args);
-      } catch (OptionException var23) {
+      } catch (OptionException var26) {
          optionParser.printHelpOn((OutputStream)System.out);
          System.out.println("(to pass in arguments to minecraft directly use: \'--\' followed by your arguments");
          return;
@@ -333,17 +347,21 @@ public class Bootstrap extends JFrame {
          if(hostName != null) {
             try {
                proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(hostName, ((Integer)optionSet.valueOf((OptionSpec)proxyPortOption)).intValue()));
-            } catch (Exception var22) {
+            } catch (Exception var25) {
                ;
             }
          }
 
-         String proxyUser = (String)optionSet.valueOf((OptionSpec)proxyUserOption);
-         String proxyPass = (String)optionSet.valueOf((OptionSpec)proxyPassOption);
-         PasswordAuthentication passwordAuthentication = null;
+         final String proxyUser = (String)optionSet.valueOf((OptionSpec)proxyUserOption);
+         final String proxyPass = (String)optionSet.valueOf((OptionSpec)proxyPassOption);
+         final PasswordAuthentication passwordAuthentication = null;
          if(!proxy.equals(Proxy.NO_PROXY) && stringHasValue(proxyUser) && stringHasValue(proxyPass)) {
-            passwordAuthentication = new PasswordAuthentication(proxyUser, proxyPass.toCharArray());
-            Authenticator.setDefault(new Bootstrap$2(passwordAuthentication));
+//            passwordAuthentication = new PasswordAuthentication(proxyUser, proxyPass.toCharArray());
+            Authenticator.setDefault(new Authenticator() {
+               protected PasswordAuthentication getPasswordAuthentication() {
+                  return new PasswordAuthentication(proxyUser, proxyPass.toCharArray());
+               }
+            });
          }
 
          File workingDirectory = (File)optionSet.valueOf((OptionSpec)workingDirectoryOption);
@@ -359,10 +377,20 @@ public class Bootstrap extends JFrame {
 
             try {
                frame.execute(force);
-            } catch (Throwable var21) {
-               ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-               var21.printStackTrace(new PrintStream(outputStream));
-               frame.println("FATAL ERROR: " + outputStream.toString());
+            } catch (Throwable var24) {
+               ByteArrayOutputStream stracktrace = new ByteArrayOutputStream();
+               var24.printStackTrace(new PrintStream(stracktrace));
+               StringBuilder report = new StringBuilder();
+               report.append(stracktrace).append("\n\n-- Head --\nStacktrace:\n").append(stracktrace).append("\n\n").append(frame.outputBuffer);
+               report.append("\tMinecraft.Bootstrap Version: 5");
+
+               try {
+                  HopperService.submitReport(proxy, report.toString(), "Minecraft.Bootstrap", "5");
+               } catch (Throwable var23) {
+                  ;
+               }
+
+               frame.println("FATAL ERROR: " + stracktrace.toString());
                frame.println("\nPlease fix the error and restart.");
             }
 
